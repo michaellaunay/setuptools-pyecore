@@ -1,7 +1,6 @@
 """Implementation of the setuptools command 'pyecore'."""
 import collections
 import contextlib
-import distutils.log as logger
 import logging
 import pathlib
 import shlex
@@ -9,6 +8,8 @@ import shlex
 import pyecore.resources
 import pyecoregen.ecore
 import setuptools
+from setuptools._distutils import log as logger
+from setuptools.errors import OptionError
 
 
 class PyEcoreCommand(setuptools.Command):
@@ -55,38 +56,38 @@ class PyEcoreCommand(setuptools.Command):
         as late as possible, ie. after any option assignments from the command-line or from other
         commands have been done.
         """
-        # parse ecore-models option
-        if self.ecore_models:
-            self.ecore_models = shlex.split(self.ecore_models, comments=True)
-
-        # parse output option
-        tokens = shlex.split(self.output, comments=True)
-        self.output = collections.defaultdict(lambda: None)
-
-        for token in tokens:
-            model, output = token.split('=', 1)
-            # check if model and output are specified
+        # Parse into local state so an invalid option does not leave a partly
+        # finalized command that cannot be corrected and retried.
+        models = shlex.split(self.ecore_models, comments=True) if self.ecore_models else None
+        output_paths = collections.defaultdict(lambda: None)
+        for token in shlex.split(self.output, comments=True):
+            model, output = self._split_mapping(token)
             if model and output:
-                # add relative output path to dictionary
                 output_path = pathlib.Path(output).relative_to('.')
                 if model == 'default':
-                    self.output.default_factory = lambda: output_path
+                    output_paths.default_factory = lambda path=output_path: path
                 else:
-                    self.output[model] = output_path
+                    output_paths[model] = output_path
             else:
                 logger.warn('Ignoring invalid output specifier {!r}.', token)
 
-        # parse user-modules option
-        tokens = shlex.split(self.user_modules, comments=True)
-        self.user_modules = {}
-
-        for token in tokens:
-            model, user_module = token.split('=', 1)
-            # check if model and user module are specified
+        user_modules = {}
+        for token in shlex.split(self.user_modules, comments=True):
+            model, user_module = self._split_mapping(token)
             if model and user_module:
-                self.user_modules[model] = user_module
+                user_modules[model] = user_module
             else:
                 logger.warn('Ignoring invalid user module specifier {!r}.', token)
+
+        self.ecore_models = models
+        self.output = output_paths
+        self.user_modules = user_modules
+
+    @staticmethod
+    def _split_mapping(token):
+        if '=' not in token:
+            raise OptionError(f'Expected model=value, got {token!r}')
+        return token.split('=', 1)
 
     def _configure_logging(self):
         """Configure logging using global verbosity level of distutils."""
@@ -120,13 +121,11 @@ class PyEcoreCommand(setuptools.Command):
         :return: root package of the Ecore model
         """
         rset = pyecore.resources.ResourceSet()
+        logger.debug('loading \'{!s}\''.format(str(ecore_model_path)))
+        resource = rset.get_resource(ecore_model_path.as_posix())
         try:
-            logger.debug('loading \'{!s}\''.format(str(ecore_model_path)))
-            resource = rset.get_resource(ecore_model_path.as_posix())
             yield resource.contents[0]
-        except Exception:
-            raise
-        else:
+        finally:
             rset.remove_resource(resource)
 
     def run(self):
@@ -165,3 +164,25 @@ class PyEcoreCommand(setuptools.Command):
                     )
                 else:
                     logger.debug('skipping {!r} metamodel'.format(resource.name))
+
+
+def _config_alias(attribute, *, boolean=False):
+    """Support historic dashed setup.cfg keys with modern setuptools."""
+    def get(command):
+        return getattr(command, attribute)
+
+    def set_(command, value):
+        if boolean and isinstance(value, str):
+            from setuptools._distutils.util import strtobool
+            value = strtobool(value)
+        setattr(command, attribute, value)
+
+    return property(get, set_)
+
+
+# Modern setuptools preserves dashes in custom command sections. CLI options
+# still normalize to underscores; these descriptors preserve old config files.
+setattr(PyEcoreCommand, 'ecore-models', _config_alias('ecore_models'))
+setattr(PyEcoreCommand, 'user-modules', _config_alias('user_modules'))
+setattr(PyEcoreCommand, 'auto-register-package',
+        _config_alias('auto_register_package', boolean=True))

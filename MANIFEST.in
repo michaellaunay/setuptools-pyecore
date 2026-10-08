@@ -1,1 +1,4 @@
 include README.rst CHANGELOG.md LICENSE
+recursive-include resources *.cfg
+recursive-include tests *.py *.ecore *.toml *.in *.rst
+recursive-include samples *.py *.cfg *.toml *.ecore *.in

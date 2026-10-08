@@ -42,7 +42,7 @@ Installation
 
 ``setuptools-pyecore`` can be installed in various ways. To run it the following prerequisites have to be fulfilled:
 
-- Python 3.4+
+- Python 3.12+
 - setuptools
 
 After installation, the used Python environment has a new setuptools command called ``pyecore``.
@@ -76,18 +76,51 @@ Usage
 Integration
 ***********
 
-For a smooth user experience it's recommended to pass ``setuptools-pyecore`` using the ``setup_requires`` argument of setup function. Additionally the generated Python code depends on the ``pyecore`` library which should be added to ``install_requires`` argument:
+Generate model sources explicitly **before** creating the sdist or wheel.
+The public ``python setup.py pyecore`` command remains supported; there is no
+removal or runtime deprecation warning in this release. ``setup_requires`` and
+pytest-runner integration are obsolete and should be removed from clients.
 
-.. code:: python
+Recommended migration without the plugin::
 
-    setup(
-        ...
-        setup_requires=['setuptools-pyecore'],
-        install_requires=['pyecore']
-        ...
-    )
+    python -m pyecoregen.cli -e models/library.ecore -o src/myproject
+    python -m build
 
-Before generating Python code from a given Ecore model ``setuptools`` will automatically check the Python environment and download ``setuptools-pyecore`` from `PyPI <https://pypi.org>`__ if it's missing. During the installation of the project package ``pip`` will install ``pyecore`` into the Python environment.
+Or, with this plugin already installed in the developer environment::
+
+    python setup.py pyecore
+    python -m build
+
+The generation step must precede package discovery. Include the generated Python
+sources in the sdist (for example ``recursive-include src *.py`` in MANIFEST.in).
+A client can then declare only ``setuptools>=77`` and ``wheel`` in its
+``[build-system].requires``, and ``pyecore`` as a runtime dependency. Neither the
+plugin nor the generator is required in its isolated build environment. Keep a
+minimal setup.py calling setup() only if using the legacy command.
+
+Do not rely on ``setup_requires`` to fetch the plugin implicitly, and do not run
+code generation from an import of setup.py or a metadata hook. If a legacy custom
+backend intentionally runs the command inside an isolated build, it must explicitly
+declare the plugin in build-system.requires; this is separate from the recommended
+pre-generation workflow.
+
+For the migration workspace, prepare wheels from the local PyEcore, pymultigen,
+pyecoregen and setuptools-pyecore forks. Install those explicit paths and use
+``PIP_NO_INDEX=1`` with a prepared wheelhouse and constraints referencing the local
+wheels during isolated builds. Installing by package name from an unrestricted
+index does not prove local-fork provenance. Missing local dependencies must fail,
+not silently download an older PyEcore.
+
+The executable fixture in tests/fixtures/client exercises both generation commands,
+builds a wheel from its sdist in an isolated environment without generation tools,
+and installs the result with the explicit local PyEcore into a fresh runtime.
+
+Testing::
+
+    python -m pytest tests
+
+Install the ``test`` extra first. Integration tests use build, venv and pip, and
+inherit pip's offline wheelhouse/constraints configuration.
 
 Configuration
 *************
@@ -104,7 +137,8 @@ It's also possible to pass several options to ``pyecoregen`` or execute multiple
 
 ::
 
-    > python setup.py pyecore --auto-register-package --output "default=gen" bdist_wheel
+    > python setup.py pyecore --auto-register-package --output "default=gen"
+    > python -m build
 
 See ``python setup.py pyecore --help`` for available command line options:
 
@@ -138,6 +172,10 @@ Apart from passing options on the command line it's also possible to add a dedic
     # Generate package auto-registration for the PyEcore 'global_registry' (yes|no); default: no
     auto-register-package = yes
 
+Underscore keys (``ecore_models``, ``user_modules``,
+``auto_register_package``) are preferred in new setup.cfg files. Historical
+dashed keys remain supported, including yes/no boolean values.
+
 A reference configuration is provided in the ``resources`` directory.
 
 ``pyecoregen`` inherits the log level globally configured for ``setuptools``. To set the verbosity to a certain log level pass the global options ``verbose`` or ``quiet`` straight before the ``pyecore`` command on the command line:
@@ -165,4 +203,5 @@ To generate code out of the Ecore model and build a ``library`` wheel package ex
 
 ::
 
-    > python setup.py pyecore bdist_wheel
+    > python setup.py pyecore
+    > python -m build

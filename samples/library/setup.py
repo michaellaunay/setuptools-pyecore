@@ -10,6 +10,5 @@ if __name__ == '__main__':
         author='Andreas Schmidl',
         author_email='Andreas.Schmidl@gmail.com',
         packages=find_packages(),
-        setup_requires=['setuptools-pyecore'],
         install_requires=['pyecore']
     )

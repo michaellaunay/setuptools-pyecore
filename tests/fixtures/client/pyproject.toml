@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "build_backend"
+backend-path = ["."]
+
+[project]
+name = "t08-client"
+version = "0.0.1"
+requires-python = ">=3.12"
+dependencies = ["pyecore"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["client*"]
