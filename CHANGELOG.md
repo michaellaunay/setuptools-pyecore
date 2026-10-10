@@ -1,3 +1,13 @@
+## Unreleased — Python 3.14 migration (release decision pending)
+
+- CPython >=3.12 metadata; qualified 3.12/3.13/3.14 standard with GIL on Linux x86_64 only.
+- Build backend setuptools >=83.0.0 and test extra pytest >=9.0.3. Project/module names, nsURI, licenses and author credits are retained.
+- Retained the setuptools command, entry point and setup.cfg configuration compatibility.
+- Client builds no longer require implicit generation or setup_requires; generation is an explicit preparatory step.
+- Isolated sdist-to-wheel builds and installed plugin/resource discovery are qualified.
+
+Generate models explicitly before building a client. Do not depend on build-time network generation. Keep the existing [pyecore] setup.cfg options and run the configured pyecore command when using the compatibility plugin.
+
 # Changelog
 All notable changes to this project will be documented in this file.
 
